@@ -42,6 +42,10 @@ main:
 	# j	exit
 
 	la	t2, output_buffer
+	li	t3, ' '
+	li	t4, '\t'
+	li	t5, ':'	# colon indicates lines beggining with a label
+	li	t6, '\n'
 
 read_line:
 	la	t1, line_buffer	# Load the address of the line buffer into t1
@@ -50,25 +54,17 @@ read_line:
 read_line_loop:
 	# Check if end of file or newline is reached
 	lbu	t0, 0(a1)	# Load a byte from the input buffer into t0
-	li	t6, '\n'	# Load newline character into t2
+	addi	a1, a1, 1
 # TO BE CHANGED!!!
 	beqz	t0, exit	# End of file (buffer) reached
-	beq	t0, t6, process_line	# If t0 is newline, process the line
 
 	# Copy the byte to the line buffer
 	sb	t0, (t1)	# Store the byte in the line_buffer
-	addi	a1, a1, 1	# Increment the input buffer pointer
 	addi	t1, t1, 1	# Increment the line buffer pointer
-	j	read_line_loop
+	bne	t0, t6, read_line_loop	# If t0 is newline, process the line
 
-process_line:
-	sb	t0, (t1)	# Store the newline character in the line buffer
-	addi	t1, t1, 1	# Increment the line buffer pointer
 	sb	zero, (t1)	# Null-terminate the line
 	la	t1, line_buffer	# Reset the line buffer pointer
-	li	t3, ' '
-	li	t4, '\t'
-	li	t5, ':'	# colon indicates lines beggining with a label
 
 	# WORKFLOW (for debugging): print the content of the line
 	# la	a0, line_buffer	# Load line buffer
@@ -76,45 +72,61 @@ process_line:
 	# ecall
 
 # Check if the line starts with a label
-find_label:
+process_line:
 	lbu	t0, 0(t1)	# Load a byte from the line buffer into t0
 	addi	t1, t1, 1	# Increment the line buffer pointer
-	beqz	t0, copy_instruction	# Colon not found, proceed with the line identification
-	# TO BE CHANGED!!!
-	beqz	t0, exit	# End of file reached
 
-	bne	t0, t5, find_label	# If t0 is not colon, continue to next byte
+	beq	t0, t5, reset_line_buffer	# If t0 is a colon, ommit the tab before the label
 	
-	# when the colon is found, the line is a label, we reset the line_buffer and proceed with the first column
+	# If null indicator found
+	bnez	t0, process_line	# If t0 is not null, continue to next byte
+
+	# If the line does not start with a label, add a tab before the instruction
+add_tab_before_instruction:
+	sb	t4, 0(t2)	# Store a tab before the instruction
+	addi	t2, t2, 1	# Increment the output buffer pointer
+
+reset_line_buffer:
 	la	t1, line_buffer	# Reset the line buffer pointer
+
+# Skip leading spaces and tabs before the label
+skip_leading_spaces:
+	lbu	t0, 0(t1)	# Load a byte from the line buffer into t0
+	addi	t1, t1, 1	# Increment the line buffer pointer
+	beq	t0, t3, skip_leading_spaces	# Skip leading spaces
+	beq	t0, t4, skip_leading_spaces	# Skip leading tabs
+
+	sb	t0, 0(t2)
+	addi	t2, t2, 1
 
 # Copy the label to the output buffer
 first_column:
-	lbu	t0, 0(t1)	# Load a byte from the line buffer into t0
-	beqz	t0, read_line	# End of label reached, go back to reading the next line
-	addi	t1, t1, 1	# Increment the line buffer pointer
-	beq	t0, t3, first_column	# Skip leading spaces
-	beq	t0, t4, first_column	# Skip leading tabs
-	sb	t0, 0(t2)	# Store the byte in the output buffer
-	addi	t2, t2, 1	# Increment the output buffer pointer
+	lbu	t0, 0(t1)
+	beqz	t0, read_line	# End of line reached, go back to reading the next line
+	addi	t1, t1, 1
 	
-	bne	t0, t5, first_column	# If t0 is not colon, continue to next byte
+	# If space or tab is found, go to next column
+	beq	t0, t4, add_tab_after_first_column	# If t0 is a tab, skip to the next column
+	sb	t0, 0(t2)
+	addi	t2, t2, 1
+	bne	t0, t3, first_column	# If t0 is a space, skip to the next column
 
-	# After the colon
-	sb	t4, 0(t2)	# Store a tab after the colon
+	# Store a tab after the first column
+add_tab_after_first_column:
+	sb	t4, 0(t2)
 	addi	t2, t2, 1
 
 # Skip leading spaces and tabs after the colon
-skip_spaces_after_colon:
+skip_spaces_after_first_column:
 	lbu	t0, 0(t1)	# Load a byte from the line buffer into t0
 	beqz	t0, read_line	# End of line reached, go back to reading the next line
 	addi	t1, t1, 1	# Increment the line buffer pointer
-	beq 	t0, t3, skip_spaces_after_colon	# Skip spaces
-	beq 	t0, t4, skip_spaces_after_colon	# Skip tabs
+	beq 	t0, t3, skip_spaces_after_first_column	# Skip spaces
+	beq 	t0, t4, skip_spaces_after_first_column	# Skip tabs
 
-	# Copy the first found character after the tab after colon to the output buffer
-	sb	t0, 0(t2)	# Store the byte in the output buffer
-	addi	t2, t2, 1	# Increment the output buffer pointer
+	# Copy the first found character after the tab to the output buffer
+	sb	t0, 0(t2)
+	addi	t2, t2, 1
 
 second_column:
 	lbu	t0, 0(t1)
@@ -133,16 +145,14 @@ skip_multiple_spaces:
 	addi	t2, t2, 1
 	j	second_column
 
-copy_instruction:
-
 exit:
 	# Null-terminate the output buffer
 	sb	zero, (t2)	# Null-terminate the output buffer
 
 	# WORKFLOW: print the input buffer for debugging
-	# la	a0, input_buffer	# Load input buffer
-	# li	a7, SYS_PRINT_STRING	# Syscall to print string
-	# ecall
+	la	a0, input_buffer	# Load input buffer
+	li	a7, SYS_PRINT_STRING	# Syscall to print string
+	ecall
 	
 	# WORKFLOW: print the formatted content for debugging
 	la	a0, output_buffer	# Load output buffer
