@@ -62,6 +62,8 @@ read_line_loop:
 	j	read_line_loop
 
 process_line:
+	sb	t0, (t1)	# Store the newline character in the line buffer
+	addi	t1, t1, 1	# Increment the line buffer pointer
 	sb	zero, (t1)	# Null-terminate the line
 	la	t1, line_buffer	# Reset the line buffer pointer
 	li	t3, ' '
@@ -72,7 +74,6 @@ process_line:
 	# la	a0, line_buffer	# Load line buffer
 	# li	a7, SYS_PRINT_STRING	# Syscall to print string
 	# ecall
-	# j	exit
 
 # Check if the line starts with a label
 find_label:
@@ -111,12 +112,26 @@ skip_spaces_after_colon:
 	beq 	t0, t3, skip_spaces_after_colon	# Skip spaces
 	beq 	t0, t4, skip_spaces_after_colon	# Skip tabs
 
-# second_column:
-# 	beqz	t0, read_line	# End of line reached, go back to reading the next line
+	# Copy the first found character after the tab after colon to the output buffer
+	sb	t0, 0(t2)	# Store the byte in the output buffer
+	addi	t2, t2, 1	# Increment the output buffer pointer
 
+second_column:
+	lbu	t0, 0(t1)
+	addi	t1, t1, 1
+	beqz	t0, read_line	# End of line reached, go back to reading the next line
+	sb	t0, 0(t2)
+	addi	t2, t2, 1
+	bne	t0, t3, second_column	# If t0 is a space, go to skip_multiple_spaces
 
-
-
+skip_multiple_spaces:
+	lbu	t0, 0(t1)
+	addi	t1, t1, 1
+	beqz	t0, read_line	# End of line reached, go back to reading the next line
+	beq	t0, t3, skip_multiple_spaces	# Skip spaces
+	sb	t0, 0(t2)
+	addi	t2, t2, 1
+	j	second_column
 
 copy_instruction:
 
