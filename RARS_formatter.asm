@@ -1,3 +1,8 @@
+# 14.Write a formatting program for assembly source files, compatible with RARS assembly 
+# language. The formatter should process the assembly source file by aligning it into three 
+# standard columns, using HT codes; it should also remove unnecessary spaces, leaving 
+# single spaces (between arguments) or replacing them with tabs.
+	
 	.eqv SYS_PRINT_STRING, 4
 	.eqv SYS_GET_CWD, 17
 	.eqv SYS_OPEN_FILE, 1024
@@ -36,29 +41,32 @@ main:
 	# ecall
 	# j	exit
 
-# Process the content line by line
+	la	t2, output_buffer
+
 read_line:
+	la	t1, line_buffer	# Load the address of the line buffer into t1
+
+# Process the content line by line
+read_line_loop:
 	# Check if end of file or newline is reached
-	la	t1, line_buffer	# Load/reset the address of the line buffer into t1
 	lbu	t0, 0(a1)	# Load a byte from the input buffer into t0
-	li	t2, '\n'	# Load newline character into t2
-	beqz	t0, process_line	# End of file (buffer) reached
-	beq	t0, t2, process_line	# If t0 is newline, process the line
+	li	t6, '\n'	# Load newline character into t2
+# TO BE CHANGED!!!
+	beqz	t0, exit	# End of file (buffer) reached
+	beq	t0, t6, process_line	# If t0 is newline, process the line
 
 	# Copy the byte to the line buffer
 	sb	t0, (t1)	# Store the byte in the line_buffer
 	addi	a1, a1, 1	# Increment the input buffer pointer
 	addi	t1, t1, 1	# Increment the line buffer pointer
-	j	read_line
+	j	read_line_loop
 
 process_line:
 	sb	zero, (t1)	# Null-terminate the line
 	la	t1, line_buffer	# Reset the line buffer pointer
-
-	la	t2, '\t'
-	la 	t3, output_buffer
-	la	t4, ':'	# colon indicates lines beggining with a label
-	la	t5, ' '
+	li	t3, ' '
+	li	t4, '\t'
+	li	t5, ':'	# colon indicates lines beggining with a label
 
 	# WORKFLOW (for debugging): print the content of the line
 	# la	a0, line_buffer	# Load line buffer
@@ -66,52 +74,65 @@ process_line:
 	# ecall
 	# j	exit
 
-	# Check if the line starts with a label
+# Check if the line starts with a label
 find_label:
 	lbu	t0, 0(t1)	# Load a byte from the line buffer into t0
 	addi	t1, t1, 1	# Increment the line buffer pointer
 	beqz	t0, copy_instruction	# Colon not found, proceed with the line identification
+	# TO BE CHANGED!!!
 	beqz	t0, exit	# End of file reached
-	bne	t0, t4, find_label	# If t0 is not colon, continue to next byte
+
+	bne	t0, t5, find_label	# If t0 is not colon, continue to next byte
 	
-	# when the colon is found, the line is a label, so it goes to the process_label_line
-
-	# Copy the label to the output buffer
+	# when the colon is found, the line is a label, we reset the line_buffer and proceed with the first column
 	la	t1, line_buffer	# Reset the line buffer pointer
-	la	t2, output_buffer	# Load the output buffer pointer
-	la	t3, ' '	# Load space character into t3
-	la	t4, '\t'	# Load tab character into t4
-	la	t5, ':'	# Load colon character into t5
 
+# Copy the label to the output buffer
 first_column:
-	lbu	t6, 0(t1)	# Load a byte from the line buffer into t0
-	beqz	t6, read_line	# End of label reached, go back to reading the next line
-	beq	t6, ' ', first_column	# Skip leading spaces
-	beq	t6, '\t', first_column	# Skip leading tabs
-	sb	t6, 0(t2)	# Store the byte in the output buffer
+	lbu	t0, 0(t1)	# Load a byte from the line buffer into t0
+	beqz	t0, read_line	# End of label reached, go back to reading the next line
 	addi	t1, t1, 1	# Increment the line buffer pointer
+	beq	t0, t3, first_column	# Skip leading spaces
+	beq	t0, t4, first_column	# Skip leading tabs
+	sb	t0, 0(t2)	# Store the byte in the output buffer
 	addi	t2, t2, 1	# Increment the output buffer pointer
-	bne	t6, t5, first_column	# If t6 is not colon, continue to next byte
+	
+	bne	t0, t5, first_column	# If t0 is not colon, continue to next byte
 
-	# If colon is found
-	sb	t5, 0(t2)	# Store the colon in the output buffer
-	addi	t2, t2, 1	# Increment the output buffer pointer
-	sb	t4, 0(t2)	# Store a tab in the output buffer
-	addi	t2, t2, 1	# Increment the output buffer pointer
+	# After the colon
+	sb	t4, 0(t2)	# Store a tab after the colon
+	addi	t2, t2, 1
 
-# Copy the rest of the line after the colon
-rest_of_line:
+# Skip leading spaces and tabs after the colon
+skip_spaces_after_colon:
+	lbu	t0, 0(t1)	# Load a byte from the line buffer into t0
+	beqz	t0, read_line	# End of line reached, go back to reading the next line
 	addi	t1, t1, 1	# Increment the line buffer pointer
-	lbu	t6, 0(t1)	# Load a byte from the line buffer into t6
-	beqz	t6, read_line	# End of line reached, go back to reading the next line
+	beq 	t0, t3, skip_spaces_after_colon	# Skip spaces
+	beq 	t0, t4, skip_spaces_after_colon	# Skip tabs
+
+# second_column:
+# 	beqz	t0, read_line	# End of line reached, go back to reading the next line
+
 
 
 
 
 copy_instruction:
-	
-	
 
 exit:
+	# Null-terminate the output buffer
+	sb	zero, (t2)	# Null-terminate the output buffer
+
+	# WORKFLOW: print the input buffer for debugging
+	# la	a0, input_buffer	# Load input buffer
+	# li	a7, SYS_PRINT_STRING	# Syscall to print string
+	# ecall
+	
+	# WORKFLOW: print the formatted content for debugging
+	la	a0, output_buffer	# Load output buffer
+	li	a7, SYS_PRINT_STRING	# Syscall to print string
+	ecall
+
 	li	a7, SYS_EXIT	# Syscall to exit
 	ecall

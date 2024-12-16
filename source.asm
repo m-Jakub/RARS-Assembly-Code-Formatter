@@ -1,3 +1,4 @@
+input_buffer:	.space 1024	# Buffer to store file content
 main:
     # Open the input file for reading
     la a0, input_file         	# Load input file name to a0
