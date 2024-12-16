@@ -45,7 +45,8 @@ main:
 	li	t3, ' '
 	li	t4, '\t'
 	li	t5, ':'	# colon indicates lines beggining with a label
-	li	t6, '\n'
+	li	s1, '\n'
+	li	s0, '#'
 
 read_line:
 	la	t1, line_buffer	# Load the address of the line buffer into t1
@@ -61,7 +62,7 @@ read_line_loop:
 	# Copy the byte to the line buffer
 	sb	t0, (t1)	# Store the byte in the line_buffer
 	addi	t1, t1, 1	# Increment the line buffer pointer
-	bne	t0, t6, read_line_loop	# If t0 is newline, process the line
+	bne	t0, s1, read_line_loop	# If t0 is newline, process the line
 
 	sb	zero, (t1)	# Null-terminate the line
 	la	t1, line_buffer	# Reset the line buffer pointer
@@ -93,6 +94,7 @@ reset_line_buffer:
 skip_leading_spaces:
 	lbu	t0, 0(t1)	# Load a byte from the line buffer into t0
 	addi	t1, t1, 1	# Increment the line buffer pointer
+	beq	t0, s0, comment_only_line_found
 	beq	t0, t3, skip_leading_spaces	# Skip leading spaces
 	beq	t0, t4, skip_leading_spaces	# Skip leading tabs
 
@@ -133,6 +135,7 @@ second_column:
 	lbu	t0, 0(t1)
 	addi	t1, t1, 1
 	beqz	t0, read_line	# End of line reached, go back to reading the next line
+	beq	t0, s0, hashtag_found
 	sb	t0, 0(t2)
 	addi	t2, t2, 1
 	beq	t0, t4, skip_multiple_spaces	# If t0 is a tab, go to skip_multiple_spaces
@@ -142,11 +145,29 @@ skip_multiple_spaces:
 	lbu	t0, 0(t1)
 	addi	t1, t1, 1
 	beqz	t0, read_line	# End of line reached, go back to reading the next line
+	beq	t0, s0, hashtag_found
 	beq	t0, t3, skip_multiple_spaces	# Skip spaces
 	beq	t0, t4, skip_multiple_spaces	# Skip tabs
 	sb	t0, 0(t2)
 	addi	t2, t2, 1
 	j	second_column
+
+space_before_hashtag:
+	sb	t4, -1(t2)	# Replace the space with a tab
+	j	comment_only_line_found
+
+hashtag_found:
+	# load t6 with t2 - 1, to check if there is a space before the hashtag
+	lbu	t6, -1(t2)
+	beq	t3, t6, space_before_hashtag	# If there is a space before the hashtag, replace it with a tab
+	beq	t4, t6, space_before_hashtag	# If there is a tab before the hashtag
+	sb	t4, 0(t2)	# Store a tab before the hashtag
+	addi	t2, t2, 1
+
+comment_only_line_found:
+	sb	s0, 0(t2)
+	addi	t2, t2, 1
+	bnez	t0, second_column
 
 exit:
 	# Null-terminate the output buffer
