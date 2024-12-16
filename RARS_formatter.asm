@@ -106,10 +106,11 @@ first_column:
 	addi	t1, t1, 1
 	
 	# If space or tab is found, go to next column
+	beq	t0, t3, add_tab_after_first_column	# If t0 is a space, skip to the next column
 	beq	t0, t4, add_tab_after_first_column	# If t0 is a tab, skip to the next column
 	sb	t0, 0(t2)
 	addi	t2, t2, 1
-	bne	t0, t3, first_column	# If t0 is a space, skip to the next column
+	j	first_column
 
 	# Store a tab after the first column
 add_tab_after_first_column:
@@ -134,6 +135,7 @@ second_column:
 	beqz	t0, read_line	# End of line reached, go back to reading the next line
 	sb	t0, 0(t2)
 	addi	t2, t2, 1
+	beq	t0, t4, skip_multiple_spaces	# If t0 is a tab, go to skip_multiple_spaces
 	bne	t0, t3, second_column	# If t0 is a space, go to skip_multiple_spaces
 
 skip_multiple_spaces:
@@ -141,6 +143,7 @@ skip_multiple_spaces:
 	addi	t1, t1, 1
 	beqz	t0, read_line	# End of line reached, go back to reading the next line
 	beq	t0, t3, skip_multiple_spaces	# Skip spaces
+	beq	t0, t4, skip_multiple_spaces	# Skip tabs
 	sb	t0, 0(t2)
 	addi	t2, t2, 1
 	j	second_column

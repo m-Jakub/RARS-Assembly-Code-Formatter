@@ -8,6 +8,6 @@ main:
 
     # Read from the file into input_buffer
 	la      a1, input_buffer        # Address of the input buffer
-	li	a2, 1024                # Max bytes to read
-      li       a7, 63                  # Syscall for reading a file
+	li	a2,    1024                # Max bytes to read
+      li       a7,  	 63                  # Syscall for reading a file
     ecall
