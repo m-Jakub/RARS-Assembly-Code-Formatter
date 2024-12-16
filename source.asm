@@ -1,13 +1,14 @@
-input_buffer:	.space   1024	#   Buffer to store file content
-main:
-    # Open the input file for reading
-        la	a0, input_file         	# Load input file name to a0
-	li a1, 0                  	# Mode 0 = read
-     li	a7, 1024	# Syscall for opening a file, calling it will overwrite a0 with a descriptor (ID) of the file
-	ecall
+   main:   
+addi   t0,t0, 1   # Increment t0
+    beq  t0,t1,  label1   # Check if t0 == t1
+    j next   # Jump to next
 
-    		# Read from the file into input_buffer
-	la      a1, input_buffer        # Address of the input buffer
-	li	a2,    1024 # Max bytes to read
-      li       a7,  	 63# Syscall for reading a file
-    ecall
+label1:    li  t2 ,  10    # Load 10 into t2
+    mul   t3 , t2, t1    # Multiply t2 and t1, store in t3   
+      j end    # Jump to end
+
+    next:   sub   t1, t1, t2   # Subtract t2 from t1
+# This is a comment line without code
+    j   main    # Loop back to main
+
+end:       nop   # End of program

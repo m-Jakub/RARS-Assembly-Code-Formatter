@@ -9,6 +9,7 @@
 	.eqv SYS_READ_FILE, 63
 	.eqv SYS_WRITE_FILE, 64
 	.eqv SYS_EXIT, 10
+	.eqv SYS_CLOSE_FILE, 57
 
 	.data
 input_file:	.asciz "source.asm"	# Input file name
@@ -35,16 +36,11 @@ main:
 	li	a7, SYS_READ_FILE	# Syscall for reading a file
 	ecall
 
-	# WORKFLOW (for debugging): print the content of the input file
-	# la	a0, input_buffer	# Load input buffer
-	# li	a7, SYS_PRINT_STRING	# Syscall to print string
-	# ecall
-	# j	exit
-
 	la	t2, output_buffer
 	li	t3, ' '
 	li	t4, '\t'
 	li	t5, ':'	# colon indicates lines beggining with a label
+	li	s2, ','
 	li	s1, '\n'
 	li	s0, '#'
 
@@ -56,7 +52,6 @@ read_line_loop:
 	# Check if end of file or newline is reached
 	lbu	t0, 0(a1)	# Load a byte from the input buffer into t0
 	addi	a1, a1, 1
-# TO BE CHANGED!!!
 	beqz	t0, exit	# End of file (buffer) reached
 
 	# Copy the byte to the line buffer
@@ -66,11 +61,6 @@ read_line_loop:
 
 	sb	zero, (t1)	# Null-terminate the line
 	la	t1, line_buffer	# Reset the line buffer pointer
-
-	# WORKFLOW (for debugging): print the content of the line
-	# la	a0, line_buffer	# Load line buffer
-	# li	a7, SYS_PRINT_STRING	# Syscall to print string
-	# ecall
 
 # Check if the line starts with a label
 process_line:
@@ -136,6 +126,7 @@ second_column:
 	addi	t1, t1, 1
 	beqz	t0, read_line	# End of line reached, go back to reading the next line
 	beq	t0, s0, hashtag_found
+	beq	t0, s2, comma_found
 	sb	t0, 0(t2)
 	addi	t2, t2, 1
 	beq	t0, t4, skip_multiple_spaces	# If t0 is a tab, go to skip_multiple_spaces
@@ -146,11 +137,33 @@ skip_multiple_spaces:
 	addi	t1, t1, 1
 	beqz	t0, read_line	# End of line reached, go back to reading the next line
 	beq	t0, s0, hashtag_found
+	beq	t0, s2, comma_found
 	beq	t0, t3, skip_multiple_spaces	# Skip spaces
 	beq	t0, t4, skip_multiple_spaces	# Skip tabs
 	sb	t0, 0(t2)
 	addi	t2, t2, 1
 	j	second_column
+
+comma_found:
+	lbu	t6, -1(t2)
+	beq	t6, t3, space_before_comma
+	beq	t6, t4, space_before_comma
+	sb	s2, 0(t2)
+	addi	t2, t2, 1
+	lbu	t6, 0(t1)
+	beq	t6, t3, second_column
+	sb	t3, 0(t2)	# Store a space after the comma
+	addi	t2, t2, 1
+	j	second_column
+
+space_before_comma:
+	sb	s2, -1(t2)	# Replace the space or tab with a comma
+	lbu	t6, 0(t1)
+	beq	t6, t3, second_column
+	sb	t3, 0(t2)	# Store a space after the comma
+	addi	t2, t2, 1
+	j	second_column
+
 
 space_before_hashtag:
 	sb	t4, -1(t2)	# Replace the space with a tab
@@ -183,5 +196,26 @@ exit:
 	li	a7, SYS_PRINT_STRING	# Syscall to print string
 	ecall
 
-	li	a7, SYS_EXIT	# Syscall to exit
+	# Close the input file
+	li	a7, SYS_CLOSE_FILE
+	ecall
+
+	# Open the output file for writing
+	la	a0, output_file	# Load output file name to a0
+	li	a1, 1	# Mode 1 = write
+	li	a7, SYS_OPEN_FILE	# Syscall for opening a file, calling it will overwrite a0 with a descriptor (ID) of the file
+	ecall
+
+	# Write the formatted content to the output file
+	la	a1, output_buffer
+	li	a2, 1024
+	li	a7, SYS_WRITE_FILE
+	ecall
+
+	# Close the output file
+	li	a7, SYS_CLOSE_FILE
+	ecall
+
+	# Exit the program
+	li	a7, SYS_EXIT
 	ecall
