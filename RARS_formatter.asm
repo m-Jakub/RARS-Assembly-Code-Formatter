@@ -10,17 +10,14 @@
 	.eqv SYS_WRITE_FILE, 64
 	.eqv SYS_EXIT, 10
 	.eqv SYS_CLOSE_FILE, 57
+	.eqv buf_size, 512
 
 	.data
 input_file:	.asciz "source.asm"	# Input file name
 output_file:	.asciz "formatted_source.asm"	# Output file name
-input_buffer:	.space 1024	# Buffer to store file content
-output_buffer:	.space 1024	# Buffer for formatted output
+input_buffer:	.space buf_size	# Buffer to store chunks of the file content
+output_buffer:	.space 16384	# Buffer for chunks of formatted output
 line_buffer:	.space 256	# Buffer for a single line
-
-# For debugging:
-cwd_buffer:	.space 256	# Buffer to store current working directory
-error_msg:	.asciz "Error opening file\n"	# Error message
 
 	.text
 main:
@@ -29,43 +26,39 @@ main:
 	li	a1, 0	# Mode 0 = read
 	li	a7, SYS_OPEN_FILE	# Syscall for opening a file, calling it will overwrite a0 with a descriptor (ID) of the file
 	ecall
+	mv	s4, a0	# Store the file descriptor in s4
 
-	# Read from the file into input_buffer (it takes the file descriptor from a0, so don't need to load it again)
-	la	a1, input_buffer	# Address of the input buffer
-	li	a2, 1024	# Max bytes to read
-	li	a7, SYS_READ_FILE	# Syscall for reading a file
-	ecall
+	call	refill_input
 
-	la	t2, output_buffer
+	la	t2, output_buffer	# Load the address of the output buffer into t2
 	li	t3, ' '
 	li	t4, '\t'
 	li	t5, ':'	# colon indicates lines beggining with a label
-	li	s2, ','
-	li	s1, '\n'
 	li	s0, '#'
-
+	li	s1, '\n'
+	li	s2, ','
+	
 read_line:
-	la	t1, line_buffer	# Load the address of the line buffer into t1
+	la	s8, line_buffer	# Load the address of the line buffer into s8
 
 # Process the content line by line
 read_line_loop:
-	# Check if end of file or newline is reached
-	lbu	t0, 0(a1)	# Load a byte from the input buffer into t0
-	addi	a1, a1, 1
-	beqz	t0, exit	# End of file (buffer) reached
+	call	getc
+	bltz	s5, exit	# If the end of the file is reached, exit the program
 
 	# Copy the byte to the line buffer
-	sb	t0, (t1)	# Store the byte in the line_buffer
-	addi	t1, t1, 1	# Increment the line buffer pointer
-	bne	t0, s1, read_line_loop	# If t0 is newline, process the line
+	sb	s7, 0(s8)	# Store the byte in the line buffer
+	addi	s8, s8, 1	# Increment the line buffer pointer
+	bne	s7, s1, read_line_loop	# If t0 is newline, process the line
 
-	sb	zero, (t1)	# Null-terminate the line
-	la	t1, line_buffer	# Reset the line buffer pointer
+	sb	zero, (s8)	# Null-terminate the line
+	la	s8, line_buffer	# Reset the line buffer pointer
+
 
 # Check if the line starts with a label
 process_line:
-	lbu	t0, 0(t1)	# Load a byte from the line buffer into t0
-	addi	t1, t1, 1	# Increment the line buffer pointer
+	lbu	t0, 0(s8)	# Load a byte from the line buffer into t0
+	addi	s8, s8, 1	# Increment the line buffer pointer
 
 	beq	t0, t5, reset_line_buffer	# If t0 is a colon, ommit the tab before the label
 	
@@ -78,12 +71,12 @@ add_tab_before_instruction:
 	addi	t2, t2, 1	# Increment the output buffer pointer
 
 reset_line_buffer:
-	la	t1, line_buffer	# Reset the line buffer pointer
+	la	s8, line_buffer	# Reset the line buffer pointer
 
 # Skip leading spaces and tabs before the label
 skip_leading_spaces:
-	lbu	t0, 0(t1)	# Load a byte from the line buffer into t0
-	addi	t1, t1, 1	# Increment the line buffer pointer
+	lbu	t0, 0(s8)	# Load a byte from the line buffer into t0
+	addi	s8, s8, 1	# Increment the line buffer pointer
 	beq	t0, s0, comment_only_line_found
 	beq	t0, t3, skip_leading_spaces	# Skip leading spaces
 	beq	t0, t4, skip_leading_spaces	# Skip leading tabs
@@ -93,9 +86,9 @@ skip_leading_spaces:
 
 # Copy the label to the output buffer
 first_column:
-	lbu	t0, 0(t1)
+	lbu	t0, 0(s8)
 	beqz	t0, read_line	# End of line reached, go back to reading the next line
-	addi	t1, t1, 1
+	addi	s8, s8, 1
 	
 	# If space or tab is found, go to next column
 	beq	t0, t3, add_tab_after_first_column	# If t0 is a space, skip to the next column
@@ -111,9 +104,9 @@ add_tab_after_first_column:
 
 # Skip leading spaces and tabs after the colon
 skip_spaces_after_first_column:
-	lbu	t0, 0(t1)	# Load a byte from the line buffer into t0
+	lbu	t0, 0(s8)	# Load a byte from the line buffer into t0
 	beqz	t0, read_line	# End of line reached, go back to reading the next line
-	addi	t1, t1, 1	# Increment the line buffer pointer
+	addi	s8, s8, 1	# Increment the line buffer pointer
 	beq 	t0, t3, skip_spaces_after_first_column	# Skip spaces
 	beq 	t0, t4, skip_spaces_after_first_column	# Skip tabs
 
@@ -122,8 +115,8 @@ skip_spaces_after_first_column:
 	addi	t2, t2, 1
 
 second_column:
-	lbu	t0, 0(t1)
-	addi	t1, t1, 1
+	lbu	t0, 0(s8)
+	addi	s8, s8, 1
 	beqz	t0, read_line	# End of line reached, go back to reading the next line
 	beq	t0, s0, hashtag_found
 	beq	t0, s2, comma_found
@@ -133,8 +126,8 @@ second_column:
 	bne	t0, t3, second_column	# If t0 is a space, go to skip_multiple_spaces
 
 skip_multiple_spaces:
-	lbu	t0, 0(t1)
-	addi	t1, t1, 1
+	lbu	t0, 0(s8)
+	addi	s8, s8, 1
 	beqz	t0, read_line	# End of line reached, go back to reading the next line
 	beq	t0, s0, hashtag_found
 	beq	t0, s2, comma_found
@@ -150,7 +143,7 @@ comma_found:
 	beq	t6, t4, space_before_comma
 	sb	s2, 0(t2)
 	addi	t2, t2, 1
-	lbu	t6, 0(t1)
+	lbu	t6, 0(s8)
 	beq	t6, t3, second_column
 	sb	t3, 0(t2)	# Store a space after the comma
 	addi	t2, t2, 1
@@ -158,7 +151,7 @@ comma_found:
 
 space_before_comma:
 	sb	s2, -1(t2)	# Replace the space or tab with a comma
-	lbu	t6, 0(t1)
+	lbu	t6, 0(s8)
 	beq	t6, t3, second_column
 	sb	t3, 0(t2)	# Store a space after the comma
 	addi	t2, t2, 1
@@ -208,7 +201,7 @@ exit:
 
 	# Write the formatted content to the output file
 	la	a1, output_buffer
-	li	a2, 1024
+	li	a2, 16384
 	li	a7, SYS_WRITE_FILE
 	ecall
 
@@ -219,3 +212,29 @@ exit:
 	# Exit the program
 	li	a7, SYS_EXIT
 	ecall
+
+getc:
+	lb	s7, 0(a1)	# Load a byte from the input buffer into t0
+	beqz	s7, refill_input	# If t0 is null, refill the input buffer
+	addi	a1, a1, 1	# Increment the input buffer pointer
+	ret
+	
+
+refill_input:
+	mv	a0, s4
+	la	a1, input_buffer
+	li	a2, buf_size
+	addi	a2, a2, -1
+	li	a7, SYS_READ_FILE
+	ecall
+
+	bgtz	a0, refill_done
+	li	s5, -1
+        ret
+
+refill_done:
+	la	s6, input_buffer	# Reset the input buffer pointer
+	add	s6, s6, a0	# Add the number of bytes read to the input buffer pointer
+	sb	zero, 0(s6)	# TO BE CHANGED
+	lb	s7, (a1)	# Load the first byte from the input buffer into t0
+	ret
