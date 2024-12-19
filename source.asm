@@ -5,14 +5,9 @@
 #########################################################################
 # author - Piotr Łądkowski
 
-
-
-#########################################################################
-# constants and preinit data						#
-#########################################################################
 .eqv	SYS_EX0, 10
 .eqv	SYS_PRT, 4	# print
-.eqv	SYS_HEXPRT, 34	# print int in hex
+.eqv	SYS_HEXPRT, 34	# print int in hexabcd
 .eqv	SYS_FOP, 1024	# open file
 .eqv	SYS_FCLOSE, 57	# close file
 .eqv	SYS_FRD, 63	# read files
