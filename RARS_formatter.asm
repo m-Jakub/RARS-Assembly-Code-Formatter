@@ -61,6 +61,10 @@ read_line_loop:
 	bne	s7, s3, read_line_loop	# If s7 is not a newline character, continue reading the line
 
 	sb	zero, (s8)	# Null-terminate the line
+	# WORKFLOW: print the line buffer for debugging
+	la	a0, line_buffer	# Load line buffer
+	li	a7, SYS_PRINT_STRING	# Syscall to print a string
+	ecall
 	la	s8, line_buffer	# Reset the line buffer pointer
 
 # Check if the line starts with a label
@@ -84,8 +88,10 @@ reset_line_buffer:
 # Skip leading spaces and tabs before the label
 skip_leading_spaces:
 	lbu	t0, 0(s8)	# Load a byte from the line buffer into t0
+	lbu	t1, 1(s8)	# Load the next byte from the line buffer into t1
 	addi	s8, s8, 1	# Increment the line buffer pointer
-	beq	t0, s0, space_before_hashtag	# If t0 is a hashtag, go to the second column
+	beq	t0, s0, hashtag_found	# If t0 is a hashtag, go to the second column
+	beq	t1, s0, hashtag_found	# If t1 is a hashtag, go to the second column
 	beq	t0, t3, skip_leading_spaces	# Skip leading spaces
 	beq	t0, t4, skip_leading_spaces	# Skip leading tabs
 
@@ -168,6 +174,7 @@ space_before_comma:
 
 
 hashtag_found:
+	beq	s0, t0, line_starts_with_hashtag
 	beq	t3, t0, space_before_hashtag	# If there is a space before the hashtag, replace it with a tab
 	beq	t4, t0, space_before_hashtag	# If there is a tab before the hashtag
 
@@ -177,6 +184,8 @@ hashtag_found:
 space_before_hashtag:
 	li	s9, '\t'	# Store the tab in s9
 	call	putc
+
+line_starts_with_hashtag:
 	li 	s9, '#'
 	call	putc
 	addi	s8, s8, 1	# Increment the line buffer pointer
@@ -205,10 +214,10 @@ getc:
 	beqz	s7, refill_input	# If s7 is null, refill the input buffer
 	addi	s1, s1, 1	# Increment the input buffer pointer
 
-	# print the character for debugging
-	mv	a0, s7
-	li	a7, 11
-	ecall
+	# # WORKFLOW: print the character for debugging
+	# mv	a0, s7
+	# li	a7, 11
+	# ecall
 
 	ret
 	
@@ -216,7 +225,6 @@ empty_input_buffer:
 	li	s7, -1
 	ret
 	
-
 refill_input:
 	mv	a0, s4
 	la	a1, input_buffer
@@ -226,15 +234,16 @@ refill_input:
 	ecall
 
 	la	s1, input_buffer	# Load the address of the input buffer into s12
-
 	beqz	a0, empty_input_buffer	# If a0 is 0, the input buffer is empty
 
 refill_done:
-	mv	s5, a0	# Store the number of bytes read in s5
 	la	s6, input_buffer	# Reset the input buffer pointer
 	add	s6, s6, a0	# Add the number of bytes read to the input buffer pointer
 	sb	zero, 0(s6)	# TO BE CHANGED
-	lb	s7, (a1)	# Load the first byte from the input buffer into s7
+
+	la	s1, input_buffer	# Load the address of the input buffer into s1
+	lb	s7, 0(s1)	# Load a byte from the input buffer into s7
+	addi	s1, s1, 1	# Increment the input buffer pointer
 
 	li	t0, buf_size
 	addi	t0, t0, -2
@@ -270,7 +279,6 @@ putc:
 	ret
 
 flush_output:
-
 	mv	t0, s11	# Store the output buffer pointer in t0
 	la	s11, output_buffer	# Reset the output buffer pointer
 	
