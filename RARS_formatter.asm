@@ -17,7 +17,7 @@ input_file:	.asciz "source.asm"	# Input file name
 output_file:	.asciz "formatted_source.asm"	# Output file name
 input_buffer:	.space buf_size	# Buffer to store chunks of the file content
 output_buffer:	.space 16384	# Buffer for chunks of formatted output
-line_buffer:	.space 256	# Buffer for a single line
+line_buffer:	.space 256	# Buffer
 
 	.text
 main:
@@ -27,7 +27,7 @@ main:
 	li	a7, SYS_OPEN_FILE	# Syscall for opening a file, calling it will overwrite a0 with a descriptor (ID) of the file
 	ecall
 	mv	s4, a0	# Store the file descriptor in s4
-
+	
 	call	refill_input
 
 	la	t2, output_buffer	# Load the address of the output buffer into t2
@@ -49,11 +49,10 @@ read_line_loop:
 	# Copy the byte to the line buffer
 	sb	s7, 0(s8)	# Store the byte in the line buffer
 	addi	s8, s8, 1	# Increment the line buffer pointer
-	bne	s7, s1, read_line_loop	# If t0 is newline, process the line
+	bne	s7, s1, read_line_loop	# If s7 is not a newline character, continue reading the line
 
 	sb	zero, (s8)	# Null-terminate the line
 	la	s8, line_buffer	# Reset the line buffer pointer
-
 
 # Check if the line starts with a label
 process_line:
@@ -176,6 +175,7 @@ comment_only_line_found:
 	bnez	t0, second_column
 
 exit:
+
 	# Null-terminate the output buffer
 	sb	zero, (t2)	# Null-terminate the output buffer
 
@@ -237,4 +237,20 @@ refill_done:
 	add	s6, s6, a0	# Add the number of bytes read to the input buffer pointer
 	sb	zero, 0(s6)	# TO BE CHANGED
 	lb	s7, (a1)	# Load the first byte from the input buffer into t0
+
+	li	t0, buf_size
+	addi	t0, t0, -2
+	ble	a0, t0, last_refill_done
+	ret
+
+last_refill_done:
+	addi	s6, s6, -1
+	bne	s6, s1, add_newline_character
+	ret
+
+add_newline_character:
+	addi	s6, s6, 1
+	sb	s1, 0(s6)
+	addi	s6, s6, 1
+	sb	zero, 0(s6)
 	ret
