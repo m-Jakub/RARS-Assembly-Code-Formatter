@@ -52,7 +52,8 @@ read_line:
 # Process the content line by line
 read_line_loop:
 	call	getc
-	bltz	s5, exit	# If the end of the file is reached, exit the program
+	li	t0, -1
+	beq	s7, t0, exit	# If the end of the file is reached, exit the program
 
 	# Copy the byte to the line buffer
 	sb	s7, 0(s8)	# Store the byte in the line buffer
@@ -182,9 +183,8 @@ space_before_hashtag:
 	bnez	t0, second_column
 
 exit:
-
-	# Null-terminate the output buffer
-	sb	zero, (s11)
+	sb	zero, 0(s11)	# Null-terminate the output buffer
+	call	flush_output
 
 	# Close the input file
 	mv	a0, s4
@@ -212,6 +212,10 @@ getc:
 
 	ret
 	
+empty_input_buffer:
+	li	s7, -1
+	ret
+	
 
 refill_input:
 	mv	a0, s4
@@ -223,11 +227,10 @@ refill_input:
 
 	la	s1, input_buffer	# Load the address of the input buffer into s12
 
-	bgtz	a0, refill_done
-	li	s5, -1
-        ret
+	beqz	a0, empty_input_buffer	# If a0 is 0, the input buffer is empty
 
 refill_done:
+	mv	s5, a0	# Store the number of bytes read in s5
 	la	s6, input_buffer	# Reset the input buffer pointer
 	add	s6, s6, a0	# Add the number of bytes read to the input buffer pointer
 	sb	zero, 0(s6)	# TO BE CHANGED
@@ -247,12 +250,11 @@ refill_done:
 last_refill_done:
 	addi	s6, s6, -1
 	bne	s6, s1, add_newline_character
-	ebreak
 	ret
 
 add_newline_character:
 	addi	s6, s6, 1
-	sb	s1, 0(s6)
+	sb	s3, 0(s6)
 	addi	s6, s6, 1
 	sb	zero, 0(s6)
 	ret
@@ -262,18 +264,19 @@ putc:
 	addi	s11, s11, 1	# Increment the output buffer pointer
 	
 	la	t0, output_buffer	# Load the address of the output buffer
-	addi	t0, t0, buf_size	# Compute the end address of the output buffer
+	addi	t0, t0, buf_size	# Calculate the end of the output buffer
 	beq	s11, t0, flush_output	# If the output buffer is full, flush it
 
 	ret
 
 flush_output:
 
+	mv	t0, s11	# Store the output buffer pointer in t0
 	la	s11, output_buffer	# Reset the output buffer pointer
 	
 	mv	a0, s10	# File descriptor
 	la	a1, output_buffer	# Load the address of the output buffer
-	li	a2, buf_size	# Load the size of the output buffer
+	sub	a2, t0, s11	# Calculate the number of bytes to write
 	li	a7, SYS_WRITE_FILE	# Syscall number for writing a file
 	ecall
 
