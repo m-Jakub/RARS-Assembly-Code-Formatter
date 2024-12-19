@@ -156,10 +156,10 @@ skip_multiple_spaces:
 comma_found:
 	beq	t3, t0, space_before_comma
 	beq	t4, t0, space_before_comma
-	mv	s9, t0
+	mv	s9, t0	# If the character before the comma is not a space or tab, load it into s9
 	call	putc
-	lbu	t6, 0(s8)
-	beq	t6, t3, second_column
+	lbu	t6, 1(s8)	# Load the character after the comma into t6
+	beq	t6, t3, second_column	# If the character after the comma is a space, go to the second column 
 	li	s9, ' '
 	call	putc
 	j	second_column
@@ -167,6 +167,7 @@ comma_found:
 space_before_comma:
 	li 	s9, ','
 	call	putc
+	addi	s8, s8, 1
 	beq	t6, t3, second_column
 	li	s9, ' '
 	call	putc

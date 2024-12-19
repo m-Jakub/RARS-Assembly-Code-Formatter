@@ -26,10 +26,10 @@ main:
         ecall                           
 
         # Convert lower to uppercase
-        la      t0, buf                                
-        li      t2, '0'                 
-        li      t3, '9'                 
-        li	t6, 0
+        la      t0  , buf                                
+        li      t2,  '0'                 
+        li      t3  ,  '9'                 
+        li	t6 , 0
         li	t4, 0
         
 loop:
