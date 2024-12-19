@@ -16,7 +16,7 @@
 input_file:	.asciz "source.asm"	# Input file name
 output_file:	.asciz "formatted_source.asm"	# Output file name
 input_buffer:	.space buf_size	# Buffer to store chunks of the file content
-output_buffer:	.space 16384	# Buffer for chunks of formatted output
+output_buffer:	.space buf_size	# Buffer for chunks of formatted output
 line_buffer:	.space 256	# Buffer
 
 	.text
@@ -27,10 +27,18 @@ main:
 	li	a7, SYS_OPEN_FILE	# Syscall for opening a file, calling it will overwrite a0 with a descriptor (ID) of the file
 	ecall
 	mv	s4, a0	# Store the file descriptor in s4
+
+	# Open the output file for writing
+	la	a0, output_file	# Load output file name to a0
+	li	a1, 9	# Mode 9 = write append
+	li	a7, SYS_OPEN_FILE	# Syscall for opening a file, calling it will overwrite a0 with a descriptor (ID) of the file
+	ecall
+	mv	s10, a0	# Store the file descriptor in s10
 	
 	call	refill_input
+	
+	la	s8, output_buffer	# Reset the output buffer pointer
 
-	la	t2, output_buffer	# Load the address of the output buffer into t2
 	li	t3, ' '
 	li	t4, '\t'
 	li	t5, ':'	# colon indicates lines beggining with a label
@@ -66,8 +74,8 @@ process_line:
 
 	# If the line does not start with a label, add a tab before the instruction
 add_tab_before_instruction:
-	sb	t4, 0(t2)	# Store a tab before the instruction
-	addi	t2, t2, 1	# Increment the output buffer pointer
+	li	s9, '\t'	# Load a tab into s9
+	call putc
 
 reset_line_buffer:
 	la	s8, line_buffer	# Reset the line buffer pointer
@@ -80,8 +88,8 @@ skip_leading_spaces:
 	beq	t0, t3, skip_leading_spaces	# Skip leading spaces
 	beq	t0, t4, skip_leading_spaces	# Skip leading tabs
 
-	sb	t0, 0(t2)
-	addi	t2, t2, 1
+	mv	s9, t0	# Load the character into s9
+	call	putc
 
 # Copy the label to the output buffer
 first_column:
@@ -92,14 +100,14 @@ first_column:
 	# If space or tab is found, go to next column
 	beq	t0, t3, add_tab_after_first_column	# If t0 is a space, skip to the next column
 	beq	t0, t4, add_tab_after_first_column	# If t0 is a tab, skip to the next column
-	sb	t0, 0(t2)
-	addi	t2, t2, 1
+	mv	s9, t0	# Load the character into s9
+	call	putc
 	j	first_column
 
 	# Store a tab after the first column
 add_tab_after_first_column:
-	sb	t4, 0(t2)
-	addi	t2, t2, 1
+	li	s9, '\t'	# Load a tab into s9
+	call	putc
 
 # Skip leading spaces and tabs after the colon
 skip_spaces_after_first_column:
@@ -110,8 +118,8 @@ skip_spaces_after_first_column:
 	beq 	t0, t4, skip_spaces_after_first_column	# Skip tabs
 
 	# Copy the first found character after the tab to the output buffer
-	sb	t0, 0(t2)
-	addi	t2, t2, 1
+	mv	s9, t0	# Load the character into s9
+	call	putc
 
 second_column:
 	lbu	t0, 0(s8)
@@ -119,8 +127,8 @@ second_column:
 	beqz	t0, read_line	# End of line reached, go back to reading the next line
 	beq	t0, s0, hashtag_found
 	beq	t0, s2, comma_found
-	sb	t0, 0(t2)
-	addi	t2, t2, 1
+	mv	s9, t0	# Load the character into s9
+	call	putc
 	beq	t0, t4, skip_multiple_spaces	# If t0 is a tab, go to skip_multiple_spaces
 	bne	t0, t3, second_column	# If t0 is a space, go to skip_multiple_spaces
 
@@ -132,80 +140,60 @@ skip_multiple_spaces:
 	beq	t0, s2, comma_found
 	beq	t0, t3, skip_multiple_spaces	# Skip spaces
 	beq	t0, t4, skip_multiple_spaces	# Skip tabs
-	sb	t0, 0(t2)
-	addi	t2, t2, 1
+	mv	s9, t0	# Load the character into s9
+	call	putc
 	j	second_column
 
 comma_found:
-	lbu	t6, -1(t2)
+	lbu	t6, -2(s8)
 	beq	t6, t3, space_before_comma
 	beq	t6, t4, space_before_comma
-	sb	s2, 0(t2)
-	addi	t2, t2, 1
+	mv	s9, t0
+	call	putc
 	lbu	t6, 0(s8)
 	beq	t6, t3, second_column
-	sb	t3, 0(t2)	# Store a space after the comma
-	addi	t2, t2, 1
+	li	s9, ' '
+	call	putc
 	j	second_column
 
 space_before_comma:
-	sb	s2, -1(t2)	# Replace the space or tab with a comma
+	sb	s2, -2(s8)	# Replace the space or tab with a comma
 	lbu	t6, 0(s8)
 	beq	t6, t3, second_column
-	sb	t3, 0(t2)	# Store a space after the comma
-	addi	t2, t2, 1
+	li	s9, ' '
+	call	putc
 	j	second_column
 
 
 space_before_hashtag:
-	sb	t4, -1(t2)	# Replace the space with a tab
+	sb	t4, -2(s8)	# Replace the space with a tab
 	j	comment_only_line_found
 
 hashtag_found:
 	# load t6 with t2 - 1, to check if there is a space before the hashtag
-	lbu	t6, -1(t2)
+	lbu	t6, -2(s8)
 	beq	t3, t6, space_before_hashtag	# If there is a space before the hashtag, replace it with a tab
 	beq	t4, t6, space_before_hashtag	# If there is a tab before the hashtag
-	sb	t4, 0(t2)	# Store a tab before the hashtag
-	addi	t2, t2, 1
+	li	s9, '\t'	# Store the tab in s9
+	call	putc
 
 comment_only_line_found:
-	sb	s0, 0(t2)
-	addi	t2, t2, 1
+	li	s9, '#'
+	call	putc
 	bnez	t0, second_column
 
 exit:
 
 	# Null-terminate the output buffer
-	sb	zero, (t2)	# Null-terminate the output buffer
-
-	# WORKFLOW: print the input buffer for debugging
-	la	a0, input_buffer	# Load input buffer
-	li	a7, SYS_PRINT_STRING	# Syscall to print string
-	ecall
-	
-	# WORKFLOW: print the formatted content for debugging
-	la	a0, output_buffer	# Load output buffer
-	li	a7, SYS_PRINT_STRING	# Syscall to print string
-	ecall
+	sb	zero, (s8)
 
 	# Close the input file
+	mv	a0, s4
 	li	a7, SYS_CLOSE_FILE
 	ecall
 
-	# Open the output file for writing
-	la	a0, output_file	# Load output file name to a0
-	li	a1, 1	# Mode 1 = write
-	li	a7, SYS_OPEN_FILE	# Syscall for opening a file, calling it will overwrite a0 with a descriptor (ID) of the file
-	ecall
-
-	# Write the formatted content to the output file
-	la	a1, output_buffer
-	li	a2, 16384
-	li	a7, SYS_WRITE_FILE
-	ecall
-
 	# Close the output file
+	mv	a0, s10
 	li	a7, SYS_CLOSE_FILE
 	ecall
 
@@ -214,8 +202,8 @@ exit:
 	ecall
 
 getc:
-	lb	s7, 0(a1)	# Load a byte from the input buffer into t0
-	beqz	s7, refill_input	# If t0 is null, refill the input buffer
+	lb	s7, 0(a1)	# Load a byte from the input buffer into s7
+	beqz	s7, refill_input	# If s7 is null, refill the input buffer
 	addi	a1, a1, 1	# Increment the input buffer pointer
 	ret
 	
@@ -241,6 +229,12 @@ refill_done:
 	li	t0, buf_size
 	addi	t0, t0, -2
 	ble	a0, t0, last_refill_done
+	
+# WORKFLOW: print the input buffer for debugging
+	la	a0, input_buffer	# Load input buffer
+	li	a7, SYS_PRINT_STRING	# Syscall to print string
+	ecall
+
 	ret
 
 last_refill_done:
@@ -253,4 +247,27 @@ add_newline_character:
 	sb	s1, 0(s6)
 	addi	s6, s6, 1
 	sb	zero, 0(s6)
+	ret
+
+putc:
+	sb	s9, 0(s8)	# Store the character in the output buffer
+	addi	s8, s8, 1	# Increment the output buffer pointer
+	la	t0, output_buffer	# Load the address of the output buffer
+	addi	t0, t0, buf_size	# Compute the end address of the output buffer
+	addi	t0, t0, -1	# Adjust the end address
+	beq	s8, t0, flush_output	# If the output buffer is full, flush it
+	ret
+
+flush_output:
+	# WORKFLOW: print the formatted content for debugging
+	la	a0, output_buffer	# Load output buffer
+	li	a7, SYS_PRINT_STRING	# Syscall to print string
+	ecall
+
+	la	s8, output_buffer	# Reset the output buffer pointer
+	mv	a0, s10	# File descriptor
+	la	a1, output_buffer	# Load the address of the output buffer
+	sub	a2, s8, a1	# Compute the number of bytes in the buffer
+	li	a7, SYS_WRITE_FILE	# Syscall number for writing a file
+	ecall
 	ret
