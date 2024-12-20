@@ -10,17 +10,22 @@
 	.eqv	SYS_WRITE_FILE, 64
 	.eqv	SYS_EXIT, 10
 	.eqv	SYS_CLOSE_FILE, 57
+	.eqv	SYS_READ_STRING, 8
 	.eqv	buf_size, 512
 
 	.data
-input_file:	.asciz	"source.asm"	# Input file name
-output_file:	.asciz	"formatted_source.asm"	# Output file name
+input_file_prompt: .asciz "Enter input file name: "
+output_file_prompt: .asciz "Enter output file name: "
+input_file:   .space 64    # Adjust size based on expected file name length
+output_file:  .space 64
 input_buffer:	.space	buf_size	# Buffer to store chunks of the file content
 output_buffer:	.space	buf_size	# Buffer for chunks of formatted output
 line_buffer:	.space	256
 
 	.text
 main:
+	call	prompt_user	# Prompt the user for input and output file names
+
 	# Open the input file for reading
 	la	a0, input_file	# Load input file name to a0
 	li	a1, 0	# Mode 0 = read
@@ -336,3 +341,63 @@ flush_output:
 	# ecall
 
 	ret
+
+prompt_user:
+    # Print "Enter input file name: "
+    la a0, input_file_prompt
+    li a7, SYS_PRINT_STRING
+    ecall
+
+    # Read input file name
+    la a0, input_file
+    li a1, 64  # Maximum length of the file name
+    li a7, SYS_READ_STRING
+    ecall
+
+    # Save registers before calling remove_newline
+    addi sp, sp, -4
+    sw ra, 0(sp)
+
+    # Remove newline from input file name
+    la a0, input_file
+    call remove_newline
+
+    # Restore registers after the call
+    lw ra, 0(sp)
+    addi sp, sp, 4
+
+    # Print "Enter output file name: "
+    la a0, output_file_prompt
+    li a7, SYS_PRINT_STRING
+    ecall
+
+    # Read output file name
+    la a0, output_file
+    li a1, 64  # Maximum length of the file name
+    li a7, SYS_READ_STRING
+    ecall
+
+    # Save registers before calling remove_newline
+    addi sp, sp, -4
+    sw ra, 0(sp)
+
+    # Remove newline from output file name
+    la a0, output_file
+    call remove_newline
+
+    # Restore registers after the call
+    lw ra, 0(sp)
+    addi sp, sp, 4
+
+    ret
+
+remove_newline:
+    lbu t0, 0(a0)     # Load the first character of the string
+    beqz t0, ret_nl   # If null terminator, return
+    addi a0, a0, 1    # Move to the next character
+    li t1, '\n'       # Load newline character
+    bne t0, t1, remove_newline # If not newline, continue
+    addi a0, a0, -1   # Move back to the newline position
+    sb zero, 0(a0)    # Replace newline with null terminator
+ret_nl:
+    ret
