@@ -79,11 +79,16 @@ process_line:
 	
 reset_line_buffer:	
 	la	s8, line_buffer
-	# ebreak
 	beqz	t0, add_tab_before_instruction	# If t0 is not null (meaning the zero column contains the label), process zero column
 	
+skip_leading_spaces:	
+	lbu	t0, 0(s8)	# Load a byte from the line buffer into t0
+	addi	s8, s8, 1	# Increment the line buffer pointer
+	beq	t0, t3, skip_leading_spaces	# Skip leading spaces
+	beq	t0, t4, skip_leading_spaces	# Skip leading tabs
+	addi	s8, s8, -1	# Decrement the line buffer pointer to process the first character of the first column
+
 zero_column_loop:	# Only the label is processed in the zero column
-	# ebreak
 	lbu	t0, 0(s8)
 	addi	s8, s8, 1
 	
@@ -103,13 +108,13 @@ add_tab_before_instruction:
 	call	putc
 	
 	# Skip leading spaces and tabs before the label
-skip_leading_spaces:	
+skip_spaces_before_first_column:	
 	lbu	t0, 0(s8)	# Load a byte from the line buffer into t0
 	lbu	t1, 1(s8)	# Load the next byte from the line buffer into t1
 	addi	s8, s8, 1	# Increment the line buffer pointer
 	beq	t0, s0, hashtag_found	# If t0 is a hashtag, go to the second column
-	beq	t0, t3, skip_leading_spaces	# Skip leading spaces
-	beq	t0, t4, skip_leading_spaces	# Skip leading tabs
+	beq	t0, t3, skip_spaces_before_first_column	# Skip leading spaces
+	beq	t0, t4, skip_spaces_before_first_column	# Skip leading tabs
 	
 	mv	s9, t0	# Load the character into s9
 	call	putc
@@ -314,7 +319,7 @@ flush_output:
 	ret
 	
 prompt_user:	
-    # Print "Enter input file name:	"
+	# Print "Enter input file name:	"
 	la	a0, input_file_prompt
 	li	a7, SYS_PRINT_STRING
 	ecall
@@ -325,7 +330,7 @@ prompt_user:
 	li	a7, SYS_READ_STRING
 	ecall
 	
-    # Print "Enter output file name:	"
+	# Print "Enter output file name:	"
 	la	a0, output_file_prompt
 	li	a7, SYS_PRINT_STRING
 	ecall
