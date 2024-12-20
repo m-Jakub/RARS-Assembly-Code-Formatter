@@ -34,7 +34,7 @@ main:
         
 loop:lbu     t1, 0(t0)  
         beq	t1, zero, prefin
-        bltu    t1, t2, newlongest       
+        bltu    t1, t2, newlongest 
         bgtu    t1, t3, newlongest        
 
         addi	t4, t4, 1

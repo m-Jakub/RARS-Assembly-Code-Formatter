@@ -153,30 +153,37 @@ second_column:
 	beq	t1, s0, hashtag_found
 	beq	t1, s2, comma_found
 
-	# Save the register values before calling putc
-	addi	sp, sp, -8
-	sw	t0, 0(sp)
-	sw	t1, 4(sp)
+	beq	t0, t4, skip_multiple_spaces	# If t0 is a tab, go to skip_multiple_spaces
+	beq	t0, t3, skip_multiple_spaces	# If t0 is a space, go to skip_multiple_spaces
 
 	mv	s9, t0	# Load the character into s9
 	call	putc
 
-	lw	t0, 0(sp)
-	lw	t1, 4(sp)
-	addi	sp, sp, 8
-
-	beq	t0, t4, skip_multiple_spaces	# If t0 is a tab, go to skip_multiple_spaces
-	bne	t0, t3, second_column	# If t0 is a space, go to skip_multiple_spaces
+	j	second_column
 
 skip_multiple_spaces:
+	addi	s8, s8, -1
+
+skip_multiple_spaces_loop:
 	lbu	t0, 0(s8)
 	lbu	t1, 1(s8)
 	addi	s8, s8, 1
 	beqz	t0, read_line	# End of line reached, go back to reading the next line
 	beq	t1, s0, hashtag_found
 	beq	t1, s2, comma_found
-	beq	t0, t3, skip_multiple_spaces	# Skip spaces
-	beq	t0, t4, skip_multiple_spaces	# Skip tabs
+	beq	t1, s3, second_column	# If t0 is a newline, go to back the second_column processing
+	beq	t0, t3, skip_multiple_spaces_loop	# Skip spaces
+	beq	t0, t4, skip_multiple_spaces_loop	# Skip tabs
+
+	addi	sp, sp, -4
+	sw	t0, 0(sp)
+
+	li	s9, ' '
+	call	putc
+
+	lw	t0, 0(sp)
+	addi	sp, sp, 4
+
 	mv	s9, t0	# Load the character into s9
 	call	putc
 	j	second_column
