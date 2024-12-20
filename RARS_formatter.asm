@@ -74,12 +74,13 @@ process_line:
 	lbu	t0, 0(s8)	# Load a byte from the line buffer into t0
 	addi	s8, s8, 1	# Increment the line buffer pointer
 	
+	beq	t0, s0, reset_line_buffer	# If t0 is a hashtag, reset the line buffer
 	beq	t0, t5, reset_line_buffer	# If t0 is a colon, reset line buffer
 	bnez	t0, process_line	# If t0 is not null, continue to the next byte
 	
 reset_line_buffer:	
 	la	s8, line_buffer
-	beqz	t0, add_tab_before_instruction	# If t0 is not null (meaning the zero column contains the label), process zero column
+	bne	t5, t0, add_tab_before_instruction	# If t0 is not a colon skip the zero column processing
 	
 skip_leading_spaces:	
 	lbu	t0, 0(s8)	# Load a byte from the line buffer into t0
