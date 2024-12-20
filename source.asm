@@ -32,8 +32,7 @@ main:
         li	t6 , 0
         li	t4, 0
         
-loop:
-	lbu     t1, 0(t0)  
+loop:lbu     t1, 0(t0)  
         beq	t1, zero, prefin
         bltu    t1, t2, newlongest       
         bgtu    t1, t3, newlongest        
@@ -41,12 +40,10 @@ loop:
         addi	t4, t4, 1
         b       nextchar               
         
-reset:
-	li	t4, 0
+reset: li	t4, 0
 	b	nextchar
 	
-newlongest:
-	bgtu	t4, t6, assignment
+newlongest:	bgtu	t4, t6, assignment
 	b	reset
 	
 assignment:

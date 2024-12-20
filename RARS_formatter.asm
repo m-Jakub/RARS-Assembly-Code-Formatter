@@ -3,21 +3,21 @@
 # standard columns, using HT codes; it should also remove unnecessary spaces, leaving 
 # single spaces (between arguments) or replacing them with tabs.
 	
-	.eqv SYS_PRINT_STRING, 4
-	.eqv SYS_GET_CWD, 17
-	.eqv SYS_OPEN_FILE, 1024
-	.eqv SYS_READ_FILE, 63
-	.eqv SYS_WRITE_FILE, 64
-	.eqv SYS_EXIT, 10
-	.eqv SYS_CLOSE_FILE, 57
-	.eqv buf_size, 512
+	.eqv	SYS_PRINT_STRING, 4
+	.eqv	SYS_GET_CWD, 17
+	.eqv	SYS_OPEN_FILE, 1024
+	.eqv	SYS_READ_FILE, 63
+	.eqv	SYS_WRITE_FILE, 64
+	.eqv	SYS_EXIT, 10
+	.eqv	SYS_CLOSE_FILE, 57
+	.eqv	buf_size, 512
 
 	.data
-input_file:	.asciz "source.asm"	# Input file name
-output_file:	.asciz "formatted_source.asm"	# Output file name
-input_buffer:	.space buf_size	# Buffer to store chunks of the file content
-output_buffer:	.space buf_size	# Buffer for chunks of formatted output
-line_buffer:	.space 256
+input_file:	.asciz	"source.asm"	# Input file name
+output_file:	.asciz	"formatted_source.asm"	# Output file name
+input_buffer:	.space	buf_size	# Buffer to store chunks of the file content
+output_buffer:	.space	buf_size	# Buffer for chunks of formatted output
+line_buffer:	.space	256
 
 	.text
 main:
@@ -36,6 +36,7 @@ main:
 	mv	s10, a0	# Store the file descriptor in s10
 	
 	call	refill_input
+	addi	s1, s1, -1	# Decrement the input buffer pointer to prevent skipping the first character
 	
 	la	s11, output_buffer	# Reset the output buffer pointer
 
@@ -61,29 +62,45 @@ read_line_loop:
 	bne	s7, s3, read_line_loop	# If s7 is not a newline character, continue reading the line
 
 	sb	zero, (s8)	# Null-terminate the line
-	# WORKFLOW: print the line buffer for debugging
-	la	a0, line_buffer	# Load line buffer
-	li	a7, SYS_PRINT_STRING	# Syscall to print a string
-	ecall
 	la	s8, line_buffer	# Reset the line buffer pointer
+
+	# # WORKFLOW: print the line for debugging
+	# la	a0, line_buffer	# Load the address of the line buffer into a0
+	# li	a7, SYS_PRINT_STRING	# Syscall to print a string
+	# ecall
 
 # Check if the line starts with a label
 process_line:
 	lbu	t0, 0(s8)	# Load a byte from the line buffer into t0
 	addi	s8, s8, 1	# Increment the line buffer pointer
 
-	beq	t0, t5, reset_line_buffer	# If t0 is a colon, ommit the tab before the label
-	
-	# If null indicator found
-	bnez	t0, process_line	# If t0 is not null, continue to next byte
+	beq	t0, t5, reset_line_buffer	# If t0 is a colon, reset line buffer
+	bnez	t0, process_line	# If t0 is not null, continue to the next byte
 
-	# If the line does not start with a label, add a tab before the instruction
+reset_line_buffer:
+	la	s8, line_buffer
+	# ebreak
+	beqz	t0, add_tab_before_instruction	# If t0 is not null (meaning the zero column contains the label), process zero column
+
+zero_column_loop:	# Only the label is processed in the zero column
+	# ebreak
+	lbu	t0, 0(s8)
+	addi	s8, s8, 1
+
+	addi	sp, sp, -4
+	sw	t0, 0(sp)
+
+	mv	s9, t0	# Load the character into s9 to put it in the output buffer
+	call	putc
+
+	lw	t0, 0(sp)
+	addi	sp, sp, 4
+
+	bne	t0, t5, zero_column_loop	# If t0 is not a colon, continue to the next byte
+
 add_tab_before_instruction:
 	li	s9, '\t'	# Load a tab into s9
 	call putc
-
-reset_line_buffer:
-	la	s8, line_buffer	# Reset the line buffer pointer
 
 # Skip leading spaces and tabs before the label
 skip_leading_spaces:
@@ -91,7 +108,7 @@ skip_leading_spaces:
 	lbu	t1, 1(s8)	# Load the next byte from the line buffer into t1
 	addi	s8, s8, 1	# Increment the line buffer pointer
 	beq	t0, s0, hashtag_found	# If t0 is a hashtag, go to the second column
-	beq	t1, s0, hashtag_found	# If t1 is a hashtag, go to the second column
+	# beq	t1, s0, hashtag_found	# If t1 is a hashtag, go to the second column
 	beq	t0, t3, skip_leading_spaces	# Skip leading spaces
 	beq	t0, t4, skip_leading_spaces	# Skip leading tabs
 
@@ -135,8 +152,19 @@ second_column:
 	beqz	t0, read_line	# End of line reached, go back to reading the next line
 	beq	t1, s0, hashtag_found
 	beq	t1, s2, comma_found
+
+	# Save the register values before calling putc
+	addi	sp, sp, -8
+	sw	t0, 0(sp)
+	sw	t1, 4(sp)
+
 	mv	s9, t0	# Load the character into s9
 	call	putc
+
+	lw	t0, 0(sp)
+	lw	t1, 4(sp)
+	addi	sp, sp, 8
+
 	beq	t0, t4, skip_multiple_spaces	# If t0 is a tab, go to skip_multiple_spaces
 	bne	t0, t3, second_column	# If t0 is a space, go to skip_multiple_spaces
 
@@ -175,9 +203,9 @@ space_before_comma:
 
 
 hashtag_found:
-	beq	s0, t0, line_starts_with_hashtag
-	beq	t3, t0, space_before_hashtag	# If there is a space before the hashtag, replace it with a tab
-	beq	t4, t0, space_before_hashtag	# If there is a tab before the hashtag
+	beq	s0, t0, line_starts_with_hashtag	# hashtag
+	beq	t3, t0, space_before_hashtag	# space
+	beq	t4, t0, space_before_hashtag	# tab
 
 	mv	s9, t0	# Load the character into s9
 	call	putc
@@ -185,12 +213,13 @@ hashtag_found:
 space_before_hashtag:
 	li	s9, '\t'	# Store the tab in s9
 	call	putc
+	j	second_column
 
 line_starts_with_hashtag:
 	li 	s9, '#'
 	call	putc
-	addi	s8, s8, 1	# Increment the line buffer pointer
-	bnez	t0, second_column
+	# addi	s8, s8, 1	# Increment the line buffer pointer
+	j	second_column
 
 exit:
 	sb	zero, 0(s11)	# Null-terminate the output buffer
@@ -272,6 +301,11 @@ add_newline_character:
 putc:
 	sb	s9, 0(s11)	# Store the character in the output buffer
 	addi	s11, s11, 1	# Increment the output buffer pointer
+
+	# WORKFLOW: print the character for debugging
+	mv	a0, s9
+	li	a7, 11
+	ecall
 	
 	la	t0, output_buffer	# Load the address of the output buffer
 	addi	t0, t0, buf_size	# Calculate the end of the output buffer
