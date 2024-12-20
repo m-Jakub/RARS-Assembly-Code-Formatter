@@ -84,6 +84,7 @@ reset_line_buffer:
 skip_leading_spaces:	
 	lbu	t0, 0(s8)	# Load a byte from the line buffer into t0
 	addi	s8, s8, 1	# Increment the line buffer pointer
+	beq	t0, s0, hashtag_found	# If t0 is a hashtag, go to the second column
 	beq	t0, t3, skip_leading_spaces	# Skip leading spaces
 	beq	t0, t4, skip_leading_spaces	# Skip leading tabs
 	addi	s8, s8, -1	# Decrement the line buffer pointer to process the first character of the first column
@@ -91,6 +92,9 @@ skip_leading_spaces:
 zero_column_loop:	# Only the label is processed in the zero column
 	lbu	t0, 0(s8)
 	addi	s8, s8, 1
+
+	beq	t0, t3, zero_column_loop	# Skip spaces between the label name and the colon
+	beq	t0, t4, zero_column_loop	# Skip tabs between the label name and the colon
 	
 	addi	sp, sp, -4
 	sw	t0, 0(sp)
