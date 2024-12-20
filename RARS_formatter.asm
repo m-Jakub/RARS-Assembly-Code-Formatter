@@ -192,21 +192,16 @@ comma_found:
 	beq	t4, t0, space_before_comma
 	mv	s9, t0	# If the character before the comma is not a space or tab, load it into s9
 	call	putc
-	lbu	t6, 1(s8)	# Load the character after the comma into t6
-	beq	t6, t3, second_column	# If the character after the comma is a space, go to the second column
-	li	s9, ' '
-	call	putc
-	j	second_column
 	
 space_before_comma:	
-	li	s9,','
+	li	s9, ','
 	call	putc
 	addi	s8, s8, 1
+	lbu	t6, 0(s8)	# Load the character after the comma into t6
 	beq	t6, t3, second_column
 	li	s9, ' '
 	call	putc
 	j	second_column
-	
 	
 hashtag_found:	
 	beq	s0, t0, line_starts_with_hashtag	# hashtag
@@ -316,8 +311,6 @@ flush_output:
 	la	a0, output_buffer
 	li	a7, SYS_PRINT_STRING
 	ecall
-
-	
 	ret
 	
 prompt_user:	
