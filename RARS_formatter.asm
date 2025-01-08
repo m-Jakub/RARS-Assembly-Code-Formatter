@@ -248,16 +248,13 @@ exit:
 	li	a7, SYS_EXIT
 	ecall
 	
-getc:	
-	lb	s7, 0(s1)	# Load a byte from the input buffer into s7
-	beqz	s7, refill_input	# If s7 is null, refill the input buffer
-	addi	s1, s1, 1	# Increment the input buffer pointer
-
-	ret
-	
 empty_input_buffer:	
 	li	s7, -1
 	ret
+	
+getc:	
+	lb	s7, 0(s1)	# Load a byte from the input buffer into s7
+	bnez	s7, getc_return	# If s7 is null, refill the input buffer
 	
 refill_input:	
 	mv	a0, s4
@@ -277,24 +274,23 @@ refill_done:
 	
 	la	s1, input_buffer	# Load the address of the input buffer into s1
 	lb	s7, 0(s1)	# Load a byte from the input buffer into s7
-	addi	s1, s1, 1	# Increment the input buffer pointer
 	
 	li	t0, buf_size
 	addi	t0, t0, -2
-	ble	a0, t0, last_refill_done
-	
-	ret
+	bgt	a0, t0, getc_return
 	
 last_refill_done:	
 	addi	s6, s6, -1
-	bne	s6, s1, add_newline_character
-	ret
+	beq	s6, s1, getc_return
 	
 add_newline_character:	
 	addi	s6, s6, 1
 	sb	s3, 0(s6)
 	addi	s6, s6, 1
 	sb	zero, 0(s6)
+	
+getc_return:
+	addi	s1, s1, 1	# Increment the input buffer pointer
 	ret
 	
 putc:	
@@ -303,9 +299,7 @@ putc:
 	
 	la	t0, output_buffer	# Load the address of the output buffer
 	addi	t0, t0, buf_size	# Calculate the end of the output buffer
-	beq	s11, t0, flush_output	# If the output buffer is full, flush it
-	
-	ret
+	bne	s11, t0, putc_return	# If the output buffer is full, flush it
 	
 flush_output:	
 	mv	t0, s11	# Store the output buffer pointer in t0
@@ -321,6 +315,8 @@ flush_output:
 	la	a0, output_buffer
 	li	a7, SYS_PRINT_STRING
 	ecall
+
+putc_return:
 	ret
 	
 prompt_user:	
